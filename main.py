@@ -3,7 +3,7 @@ from pyrogram.raw.functions.account import ReportPeer
 from pyrogram.raw.types import (
     InputReportReasonChildAbuse, InputReportReasonFake, 
     InputReportReasonCopyright, InputReportReasonGeoIrrelevant, 
-    InputReportReasonOther
+    InputReportReasonOther, InputPeerChannel
 )
 from loguru import logger
 from config import *
@@ -28,7 +28,10 @@ def get_report_reason(text):
 def format_peer_id(peer_id):
     """Format peer ID to handle both user and channel IDs"""
     if str(peer_id).startswith('-100'):
-        return int(str(peer_id)[4:])  # Remove the -100 prefix for channels
+        # For channels, we need to remove the -100 prefix and use the channel ID directly
+        channel_id = int(str(peer_id)[4:])
+        access_hash = 0  # This will be filled by resolve_peer
+        return InputPeerChannel(channel_id=channel_id, access_hash=access_hash)
     return peer_id
 
 @app.on_message(filters.command("report") & filters.private)
@@ -55,8 +58,15 @@ async def report_user(client, message):
         logger.info(f"Attempting to report peer {peer_id} for message {message_id} with reason {reason_text}")
 
         # Format the peer ID if it's a channel
-        formatted_peer_id = format_peer_id(peer_id)
-        peer = await client.resolve_peer(formatted_peer_id)
+        peer = format_peer_id(peer_id)
+        if isinstance(peer, InputPeerChannel):
+            # For channels, we need to resolve the peer to get the access hash
+            resolved_peer = await client.resolve_peer(peer_id)
+            peer = resolved_peer
+        else:
+            # For users, resolve normally
+            peer = await client.resolve_peer(peer_id)
+            
         logger.info(f"Resolved peer information for ID {peer_id}")
 
         report_peer = ReportPeer(
