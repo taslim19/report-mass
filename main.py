@@ -38,8 +38,11 @@ def format_peer_id(peer_id):
 async def report_user(client, message):
     try:
         logger.info(f"Received /report command from user {message.from_user.id}")
+        logger.info(f"Full command text: {message.text}")
 
         command = message.text.split(maxsplit=3)
+        logger.info(f"Split command: {command}")
+        
         if len(command) != 4:
             await message.reply("Usage: /report <user_id/channel_id> <message_id> <reason>")
             logger.warning("Invalid command format")
@@ -48,29 +51,38 @@ async def report_user(client, message):
         try:
             peer_id = int(command[1])
             message_id = int(command[2])
-        except ValueError:
+            logger.info(f"Parsed peer_id: {peer_id}, message_id: {message_id}")
+        except ValueError as e:
+            logger.error(f"Error parsing IDs: {str(e)}")
             await message.reply("Peer ID and Message ID must be integers.")
             logger.warning("Invalid Peer ID or Message ID format")
             return
 
         reason_text = command[3]
+        logger.info(f"Report reason: {reason_text}")
         reason = get_report_reason(reason_text)
         logger.info(f"Attempting to report peer {peer_id} for message {message_id} with reason {reason_text}")
 
         try:
             # First try to resolve the peer directly
+            logger.info("Attempting direct peer resolution...")
             peer = await client.resolve_peer(peer_id)
+            logger.info("Direct peer resolution successful")
         except Exception as e:
             logger.warning(f"Failed to resolve peer directly: {str(e)}")
             try:
                 # If direct resolution fails, try with formatted peer ID
+                logger.info("Attempting formatted peer resolution...")
                 formatted_peer = format_peer_id(peer_id)
                 if isinstance(formatted_peer, InputPeerChannel):
                     # For channels, we need to get the channel info first
+                    logger.info("Getting channel info...")
                     channel = await client.get_chat(peer_id)
+                    logger.info(f"Got channel info: {channel.title}")
                     peer = await client.resolve_peer(channel.id)
                 else:
                     peer = await client.resolve_peer(formatted_peer)
+                logger.info("Formatted peer resolution successful")
             except Exception as e:
                 logger.error(f"Failed to resolve peer with formatted ID: {str(e)}")
                 await message.reply("Failed to resolve the peer. Make sure the ID is correct and the bot has access to the channel.")
@@ -79,13 +91,15 @@ async def report_user(client, message):
         logger.info(f"Resolved peer information for ID {peer_id}")
 
         try:
+            logger.info("Creating report peer object...")
             report_peer = ReportPeer(
                 peer=peer, 
                 reason=reason, 
                 message="Reported for inappropriate content."
             )
-
+            logger.info("Invoking report...")
             result = await client.invoke(report_peer)
+            logger.info(f"Report invocation result: {result}")
 
             if result:
                 await message.reply("Peer reported successfully.")
@@ -98,13 +112,17 @@ async def report_user(client, message):
             await message.reply("Failed to send the report. The bot might not have permission to report this peer.")
 
     except Exception as e:
-        await message.reply(f"An error occurred: {str(e)}")
         logger.exception("An error occurred while reporting the peer")
+        await message.reply(f"An error occurred: {str(e)}")
 
 # Ignore updates from channels we haven't interacted with
 @app.on_message(filters.channel)
 async def ignore_channel_updates(client, message):
     pass
+
+@app.on_message(filters.command("start") & filters.private)
+async def start_command(client, message):
+    await message.reply("Hello! I'm a reporting bot. Use /report <user_id/channel_id> <message_id> <reason> to report content.\n\nAvailable reasons:\n- child_abuse\n- impersonation\n- copyrighted_content\n- irrelevant_geogroup\n- other")
 
 logger.info("Starting bot")
 app.run()
