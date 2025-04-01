@@ -9,9 +9,15 @@ from loguru import logger
 from config import *
 
 
-logger.add("bot.log", rotation="1 MB")
+logger.add("bot.log", rotation="1 MB", level="DEBUG")
 
-app = Client("bot", api_id=api_id, api_hash=api_hash, session_string=session)
+# Create the client with a name
+app = Client(
+    "bot",
+    api_id=api_id,
+    api_hash=api_hash,
+    session_string=session
+)
 
 def get_report_reason(text):
     if text == "child_abuse":
@@ -34,7 +40,21 @@ def format_peer_id(peer_id):
         return InputPeerChannel(channel_id=channel_id, access_hash=access_hash)
     return peer_id
 
-@app.on_message(filters.command("report") & filters.private)
+# Add a handler for all messages to debug
+@app.on_message()
+async def debug_messages(client, message):
+    logger.debug(f"Received message: {message.text} from {message.from_user.id if message.from_user else 'Unknown'}")
+
+@app.on_message(filters.command("start"))
+async def start_command(client, message):
+    logger.info(f"Received start command from user {message.from_user.id}")
+    try:
+        await message.reply("Hello! I'm a reporting bot. Use /report <user_id/channel_id> <message_id> <reason> to report content.\n\nAvailable reasons:\n- child_abuse\n- impersonation\n- copyrighted_content\n- irrelevant_geogroup\n- other")
+        logger.info("Start message sent successfully")
+    except Exception as e:
+        logger.error(f"Error sending start message: {str(e)}")
+
+@app.on_message(filters.command("report"))
 async def report_user(client, message):
     try:
         logger.info(f"Received /report command from user {message.from_user.id}")
@@ -115,14 +135,18 @@ async def report_user(client, message):
         logger.exception("An error occurred while reporting the peer")
         await message.reply(f"An error occurred: {str(e)}")
 
-# Ignore updates from channels we haven't interacted with
-@app.on_message(filters.channel)
-async def ignore_channel_updates(client, message):
-    pass
+async def main():
+    logger.info("Starting bot...")
+    try:
+        await app.start()
+        logger.info("Bot started successfully!")
+        logger.info(f"Bot username: {(await app.get_me()).username}")
+        await app.idle()
+    except Exception as e:
+        logger.error(f"Error starting bot: {str(e)}")
+    finally:
+        await app.stop()
 
-@app.on_message(filters.command("start") & filters.private)
-async def start_command(client, message):
-    await message.reply("Hello! I'm a reporting bot. Use /report <user_id/channel_id> <message_id> <reason> to report content.\n\nAvailable reasons:\n- child_abuse\n- impersonation\n- copyrighted_content\n- irrelevant_geogroup\n- other")
-
-logger.info("Starting bot")
-app.run()
+# Run the bot
+logger.info("Initializing bot...")
+app.run(main())
