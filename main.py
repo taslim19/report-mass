@@ -10,6 +10,13 @@ from config import *
 
 
 logger.add("bot.log", rotation="1 MB", level="DEBUG")
+# Custom Channel ID & Access Hash
+
+CUSTOM_CHANNEL_ID = -1002165645213  # Replace with your actual channel ID
+CUSTOM_ACCESS_HASH = 1234567890123456789  # Replace with the actual access hash
+
+def get_custom_peer():
+    return InputPeerChannel(CUSTOM_CHANNEL_ID, CUSTOM_ACCESS_HASH)
 
 # Create the client with a name
 app = Client(
