@@ -149,4 +149,5 @@ async def main():
 
 # Run the bot
 logger.info("Initializing bot...")
-app.run(main())
+app.run()
+
