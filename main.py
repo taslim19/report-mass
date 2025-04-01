@@ -57,36 +57,54 @@ async def report_user(client, message):
         reason = get_report_reason(reason_text)
         logger.info(f"Attempting to report peer {peer_id} for message {message_id} with reason {reason_text}")
 
-        # Format the peer ID if it's a channel
-        peer = format_peer_id(peer_id)
-        if isinstance(peer, InputPeerChannel):
-            # For channels, we need to resolve the peer to get the access hash
-            resolved_peer = await client.resolve_peer(peer_id)
-            peer = resolved_peer
-        else:
-            # For users, resolve normally
+        try:
+            # First try to resolve the peer directly
             peer = await client.resolve_peer(peer_id)
+        except Exception as e:
+            logger.warning(f"Failed to resolve peer directly: {str(e)}")
+            try:
+                # If direct resolution fails, try with formatted peer ID
+                formatted_peer = format_peer_id(peer_id)
+                if isinstance(formatted_peer, InputPeerChannel):
+                    # For channels, we need to get the channel info first
+                    channel = await client.get_chat(peer_id)
+                    peer = await client.resolve_peer(channel.id)
+                else:
+                    peer = await client.resolve_peer(formatted_peer)
+            except Exception as e:
+                logger.error(f"Failed to resolve peer with formatted ID: {str(e)}")
+                await message.reply("Failed to resolve the peer. Make sure the ID is correct and the bot has access to the channel.")
+                return
             
         logger.info(f"Resolved peer information for ID {peer_id}")
 
-        report_peer = ReportPeer(
-            peer=peer, 
-            reason=reason, 
-            message="Reported for inappropriate content."
-        )
+        try:
+            report_peer = ReportPeer(
+                peer=peer, 
+                reason=reason, 
+                message="Reported for inappropriate content."
+            )
 
-        result = await client.invoke(report_peer)
+            result = await client.invoke(report_peer)
 
-        if result:
-            await message.reply("Peer reported successfully.")
-            logger.info(f"Successfully reported peer {peer_id} for message {message_id}")
-        else:
-            await message.reply("Failed to report the peer.")
-            logger.error(f"Failed to report peer {peer_id} for message {message_id}")
+            if result:
+                await message.reply("Peer reported successfully.")
+                logger.info(f"Successfully reported peer {peer_id} for message {message_id}")
+            else:
+                await message.reply("Failed to report the peer.")
+                logger.error(f"Failed to report peer {peer_id} for message {message_id}")
+        except Exception as e:
+            logger.error(f"Error during report invocation: {str(e)}")
+            await message.reply("Failed to send the report. The bot might not have permission to report this peer.")
 
     except Exception as e:
         await message.reply(f"An error occurred: {str(e)}")
         logger.exception("An error occurred while reporting the peer")
+
+# Ignore updates from channels we haven't interacted with
+@app.on_message(filters.channel)
+async def ignore_channel_updates(client, message):
+    pass
 
 logger.info("Starting bot")
 app.run()
