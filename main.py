@@ -25,6 +25,12 @@ def get_report_reason(text):
     else:
         return InputReportReasonOther()
 
+def format_peer_id(peer_id):
+    """Format peer ID to handle both user and channel IDs"""
+    if str(peer_id).startswith('-100'):
+        return int(str(peer_id)[4:])  # Remove the -100 prefix for channels
+    return peer_id
+
 @app.on_message(filters.command("report") & filters.private)
 async def report_user(client, message):
     try:
@@ -32,26 +38,27 @@ async def report_user(client, message):
 
         command = message.text.split(maxsplit=3)
         if len(command) != 4:
-            await message.reply("Usage: /report <user_id> <message_id> <reason>")
+            await message.reply("Usage: /report <user_id/channel_id> <message_id> <reason>")
             logger.warning("Invalid command format")
             return
 
         try:
-            user_id = int(command[1])
+            peer_id = int(command[1])
             message_id = int(command[2])
         except ValueError:
-            await message.reply("User ID and Message ID must be integers.")
-            logger.warning("Invalid User ID or Message ID format")
+            await message.reply("Peer ID and Message ID must be integers.")
+            logger.warning("Invalid Peer ID or Message ID format")
             return
 
         reason_text = command[3]
         reason = get_report_reason(reason_text)
-        logger.info(f"Attempting to report user {user_id} for message {message_id} with reason {reason_text}")
+        logger.info(f"Attempting to report peer {peer_id} for message {message_id} with reason {reason_text}")
 
-        peer = await client.resolve_peer(user_id)
-        logger.info(f"Resolved peer information for user {user_id}")
+        # Format the peer ID if it's a channel
+        formatted_peer_id = format_peer_id(peer_id)
+        peer = await client.resolve_peer(formatted_peer_id)
+        logger.info(f"Resolved peer information for ID {peer_id}")
 
-   
         report_peer = ReportPeer(
             peer=peer, 
             reason=reason, 
@@ -61,15 +68,15 @@ async def report_user(client, message):
         result = await client.invoke(report_peer)
 
         if result:
-            await message.reply("User reported successfully.")
-            logger.info(f"Successfully reported user {user_id} for message {message_id}")
+            await message.reply("Peer reported successfully.")
+            logger.info(f"Successfully reported peer {peer_id} for message {message_id}")
         else:
-            await message.reply("Failed to report the user.")
-            logger.error(f"Failed to report user {user_id} for message {message_id}")
+            await message.reply("Failed to report the peer.")
+            logger.error(f"Failed to report peer {peer_id} for message {message_id}")
 
     except Exception as e:
         await message.reply(f"An error occurred: {str(e)}")
-        logger.exception("An error occurred while reporting the user")
+        logger.exception("An error occurred while reporting the peer")
 
 logger.info("Starting bot")
 app.run()
